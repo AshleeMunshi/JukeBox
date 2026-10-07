@@ -28,9 +28,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--teal)}
 </style></head><body><main id="app"></main>
 <script>
 const APP_NAME='Queue Up';           // change the name here
-const firebaseConfig={apiKey:'AIzaSyDQlUq21Ni3NbobyW80J5QWI0TbAOXKiWo',authDomain:'jukebox-dd8ff.firebaseapp.com',
-                      databaseURL:'https://jukebox-dd8ff-default-rtdb.firebaseio.com',
-                      projectId:'jukebox-dd8ff',appId:'1:93820591553:web:d5ec4de7ed47620dc4e340'};
+const firebaseConfig={apiKey:'AIzaSyDQlUq21Ni3NbobyW80J5QWI0TbAOXKiWo',authDomain:'jukebox-dd8ff.firebaseapp.com',databaseURL:'https://jukebox-dd8ff-default-rtdb.firebaseio.com',projectId:'jukebox-dd8ff',storageBucket:'jukebox-dd8ff.firebasestorage.app',messagingSenderId:'93820591553',appId:'1:93820591553:web:d5ec4de7ed47620dc4e340'};
 
 const $=id=>document.getElementById(id),app=$('app');
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -41,7 +39,7 @@ const link=h=>location.origin+location.pathname+'?venue='+cafe+'#'+h;
 let db,auth,player,ytReady=false,off=[];
 document.title=APP_NAME;
 
-if(firebaseConfig.apiKey==='AIzaSyDQlUq21Ni3NbobyW80J5QWI0TbAOXKiWo'){
+if(firebaseConfig.apiKey.indexOf('PASTE')===0){
  app.innerHTML=`<h1>${APP_NAME}</h1><div class="card">Backend not connected yet. Paste your Firebase config into <b>index.html</b> (see the setup steps).</div>`;
 }else{
  firebase.initializeApp(firebaseConfig);db=firebase.database();auth=firebase.auth();
