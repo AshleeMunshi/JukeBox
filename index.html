@@ -28,7 +28,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--teal)}
 </style></head><body><main id="app"></main>
 <script>
 const APP_NAME='Queue Up';           // change the name here
-const firebaseConfig={apiKey:'PASTE_API_KEY',authDomain:'PASTE',databaseURL:'PASTE',projectId:'PASTE',appId:'PASTE'};
+const firebaseConfig={apiKey:'AIzaSyDQlUq21Ni3NbobyW80J5QWI0TbAOXKiWo',authDomain:'jukebox-dd8ff.firebaseapp.com',
+                      databaseURL:'https://jukebox-dd8ff-default-rtdb.firebaseio.com',
+                      projectId:'jukebox-dd8ff',appId:'1:93820591553:web:d5ec4de7ed47620dc4e340'};
 
 const $=id=>document.getElementById(id),app=$('app');
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
