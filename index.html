@@ -27,6 +27,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--teal)}
 .now{font-size:1.6rem;font-weight:800}.tag{color:var(--teal)}.qr{background:#fff;padding:10px;display:inline-block;border-radius:10px}
 </style></head><body><main id="app"></main>
 <script>
+window.addEventListener('error',e=>{const m=document.getElementById('app');if(m&&!m.children.length)m.innerHTML='<h1>Something went wrong</h1><div class="card">'+String(e.message).replace(/</g,'&lt;')+'<br><br>Take a screenshot of this and send it to Claude.</div>'});
+window.addEventListener('unhandledrejection',e=>{const m=document.getElementById('app');if(m&&!m.children.length)m.innerHTML='<h1>Something went wrong</h1><div class="card">'+String(e.reason&&e.reason.message||e.reason).replace(/</g,'&lt;')+'<br><br>Take a screenshot of this and send it to Claude.</div>'});
 const APP_NAME='Queue Up';           // change the name here
 const firebaseConfig={apiKey:'AIzaSyDQlUq21Ni3NbobyW80J5QWI0TbAOXKiWo',authDomain:'jukebox-dd8ff.firebaseapp.com',databaseURL:'https://jukebox-dd8ff-default-rtdb.firebaseio.com',projectId:'jukebox-dd8ff',storageBucket:'jukebox-dd8ff.firebasestorage.app',messagingSenderId:'93820591553',appId:'1:93820591553:web:d5ec4de7ed47620dc4e340'};
 
