@@ -90,7 +90,7 @@ async function request(){
   try{
    const cp=await base().child('coupons/'+code).get();
    if(!cp.exists())return m.textContent='Code not found. Check it with the cashier.';
-   const r=await base().child('coupons/'+code).transaction(c=>c&&c.used===false?{used:true}:undefined);
+   const r=await base().child('coupons/'+code).transaction(c=>c===null?{used:false}:(c.used===false?{used:true}:undefined));
    if(!r.committed)return m.textContent='This code is already used.';
    await base().child('queue').push({vid:v,title:$('t').value.trim()||'Requested song',code,ts:firebase.database.ServerValue.TIMESTAMP});
    m.textContent='Added! Watch the cafe screen.';$('c').value=$('u').value=$('t').value='';
