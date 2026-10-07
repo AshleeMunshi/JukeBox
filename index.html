@@ -1,118 +1,194 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cafe Jukebox</title>
+<title>Queue Up</title>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#2a1233">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
 :root{--bg:#2a1233;--card:#3b1c49;--amber:#ffb21e;--teal:#1fb8a8;--ink:#fff4e0;--mut:#c9b3d3}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,sans-serif;min-height:100vh}
 main{max-width:720px;margin:0 auto;padding:20px}
-h1{font-size:2.2rem;font-weight:800;margin:.2em 0}h2{font-size:1.2rem;margin:1.2em 0 .4em}
-a{color:var(--amber)}
+h1{font-size:2.2rem;font-weight:800;margin:.2em 0}h2{font-size:1.2rem;margin:1.2em 0 .4em}a{color:var(--amber)}
 .card{background:var(--card);border-radius:14px;padding:16px;margin:12px 0}
-input,button{font:inherit;padding:12px;border-radius:10px;border:2px solid #5a3a6b;background:#22102b;color:var(--ink);width:100%;margin:6px 0}
+input,button,select{font:inherit;padding:12px;border-radius:10px;border:2px solid #5a3a6b;background:#22102b;color:var(--ink);width:100%;margin:6px 0}
 button{background:var(--amber);color:#2a1233;font-weight:800;border:0;cursor:pointer}
 button.alt{background:transparent;color:var(--ink);border:2px solid var(--teal)}
 button:focus-visible,input:focus-visible{outline:3px solid var(--teal)}
-.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
-.row button{width:auto}.code{font-weight:800;letter-spacing:.15em;color:var(--amber)}
-.used{opacity:.4;text-decoration:line-through}.msg{color:var(--teal);min-height:1.4em}
-#scr{display:grid;grid-template-columns:1.6fr 1fr;gap:20px;max-width:1200px}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}.row button{width:auto}
+.code{font-weight:800;letter-spacing:.15em;color:var(--amber)}.used{opacity:.4;text-decoration:line-through}
+.msg{color:var(--teal);min-height:1.4em}.mut{color:var(--mut)}
+#scr{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}
 @media(max-width:800px){#scr{grid-template-columns:1fr}}
 #ytwrap{aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden}#ytwrap iframe{width:100%;height:100%}
-.now{font-size:1.6rem;font-weight:800}.tag{color:var(--teal)}#qr{background:#fff;padding:10px;display:inline-block;border-radius:10px}
+.now{font-size:1.6rem;font-weight:800}.tag{color:var(--teal)}.qr{background:#fff;padding:10px;display:inline-block;border-radius:10px}
 </style></head><body><main id="app"></main>
 <script>
-// ---- storage (swap these two functions for Firebase/Supabase later) ----
-const KEY='jukebox_v1';
-const def={cafe:'My Cafe',coupons:[],queue:[],artists:[
- {name:'Sample artist',vid:'dQw4w9WgXcQ',channel:'https://www.youtube.com/@YouTube'}],rot:0};
-const load=()=>{try{return Object.assign({},def,JSON.parse(localStorage.getItem(KEY)))}catch(e){return {...def}}};
-const save=s=>{try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}};
-// ----------------------------------------------------------------------
-const $=id=>document.getElementById(id), app=$('app');
+const APP_NAME='Queue Up';           // change the name here
+const firebaseConfig={apiKey:'PASTE_API_KEY',authDomain:'PASTE',databaseURL:'PASTE',projectId:'PASTE',appId:'PASTE'};
+
+const $=id=>document.getElementById(id),app=$('app');
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const vidId=u=>{const m=(u||'').match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null)};
 const rc=()=>Math.random().toString(36).slice(2,8).toUpperCase();
-const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let player,ytReady=false;
-window.onYouTubeIframeAPIReady=()=>{ytReady=true};
-window.addEventListener('storage',e=>{if(e.key===KEY)route(true)});
-window.addEventListener('hashchange',()=>route());
+const cafe=(new URLSearchParams(location.search).get('venue')||new URLSearchParams(location.search).get('cafe')||'demo').toLowerCase().replace(/[^a-z0-9-]/g,'')||'demo';
+const link=h=>location.origin+location.pathname+'?venue='+cafe+'#'+h;
+let db,auth,player,ytReady=false,off=[];
+document.title=APP_NAME;
 
-function route(soft){
+if(firebaseConfig.apiKey==='PASTE_API_KEY'){
+ app.innerHTML=`<h1>${APP_NAME}</h1><div class="card">Backend not connected yet. Paste your Firebase config into <b>index.html</b> (see the setup steps).</div>`;
+}else{
+ firebase.initializeApp(firebaseConfig);db=firebase.database();auth=firebase.auth();
+ window.onYouTubeIframeAPIReady=()=>{ytReady=true};
+ window.addEventListener('hashchange',route);route();
+}
+const base=()=>db.ref('cafes/'+cafe);
+const authed=()=>new Promise(r=>{const u=auth.onAuthStateChanged(x=>{u();r(x)})});
+function stop(){off.forEach(f=>f());off=[]}
+const listen=(ref,fn)=>{ref.on('value',fn);off.push(()=>ref.off('value',fn))};
+
+async function route(){
+ stop();app.style.maxWidth='';
  const h=location.hash.replace('#','')||'home';
- if(h==='screen'){if(!soft)screen()}else if(h==='request')request();else if(h==='admin')admin();else home();
+ if(h==='request')return request();
+ if(h==='admin'||h==='screen'||h==='company'){
+  const u=await authed();
+  if(!u||u.isAnonymous)return login(h);
+  return h==='admin'?admin():h==='company'?company():screen();
+ }
+ home();
 }
 function home(){
- app.innerHTML=`<h1>Cafe Jukebox</h1><p>Pick a screen:</p>
- <div class="card"><b>Cafe owner</b><br>Make coupon codes and manage artist songs.<br><a href="#admin">Open admin</a></div>
+ app.innerHTML=`<h1>${APP_NAME}</h1><p class="mut">Venue: <b>${esc(cafe)}</b></p>
+ <div class="card"><b>Venue owner</b><br>Make coupon codes and manage artist songs.<br><a href="#admin">Open admin</a></div>
  <div class="card"><b>Jukebox screen</b><br>Open this on the cafe TV.<br><a href="#screen">Open screen</a></div>
- <div class="card"><b>Customer</b><br>Enter a coupon code and a song.<br><a href="#request">Open request page</a></div>
- <p style="color:var(--mut)">Prototype note: data is saved in this browser only, so all three pages work together in one browser. Cross-device sync needs the backend step.</p>`;
+ <div class="card"><b>Customer</b><br>Enter a coupon code and a song.<br><a href="#request">Open request page</a></div>`;
 }
-function request(){
- app.innerHTML=`<h1>Play your song</h1><div class="card">
+function login(next){
+ app.innerHTML=`<h1>Owner login</h1><div class="card"><input id="e" type="email" placeholder="Email" autocomplete="username">
+ <input id="p" type="password" placeholder="Password" autocomplete="current-password"><button id="li">Log in</button><div class="msg" id="m" role="status"></div></div>`;
+ $('li').onclick=()=>auth.signInWithEmailAndPassword($('e').value.trim(),$('p').value).then(route).catch(()=>$('m').textContent='Wrong email or password.');
+}
+async function request(){
+ if(!auth.currentUser)await auth.signInAnonymously().catch(()=>{});
+ app.innerHTML=`<h1>Play your song</h1><p class="mut" id="cn"></p><div class="card">
  <label>Coupon code<input id="c" placeholder="e.g. 7KQ2ZD" autocapitalize="characters"></label>
  <label>YouTube link<input id="u" placeholder="Paste a YouTube link"></label>
  <label>Song name<input id="t" placeholder="Song name (shown on screen)"></label>
  <button id="go">Add to queue</button><div class="msg" id="m" role="status"></div></div>`;
- $('go').onclick=()=>{
-  const s=load(),code=$('c').value.trim().toUpperCase(),v=vidId($('u').value.trim());
-  const cp=s.coupons.find(x=>x.code===code);
-  if(!cp)return $('m').textContent='Code not found. Check it with the cashier.';
-  if(cp.used)return $('m').textContent='This code is already used.';
-  if(!v)return $('m').textContent='That link is not a YouTube link. Copy it from the YouTube share button.';
-  cp.used=true;s.queue.push({vid:v,title:$('t').value.trim()||'Requested song'});save(s);
-  $('m').textContent=`Added! You are number ${s.queue.length} in the queue.`;$('c').value=$('u').value=$('t').value='';
+ base().child('name').get().then(s=>{if(s.val()&&$('cn'))$('cn').textContent=s.val()}).catch(()=>{});
+ $('go').onclick=async()=>{
+  const code=$('c').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,''),v=vidId($('u').value.trim()),m=$('m');
+  if(!code)return m.textContent='Enter your coupon code.';
+  if(!v)return m.textContent='That link is not a YouTube link. Copy it from the YouTube share button.';
+  try{
+   const cp=await base().child('coupons/'+code).get();
+   if(!cp.exists())return m.textContent='Code not found. Check it with the cashier.';
+   const r=await base().child('coupons/'+code).transaction(c=>c&&c.used===false?{used:true}:undefined);
+   if(!r.committed)return m.textContent='This code is already used.';
+   await base().child('queue').push({vid:v,title:$('t').value.trim()||'Requested song',code,ts:firebase.database.ServerValue.TIMESTAMP});
+   m.textContent='Added! Watch the cafe screen.';$('c').value=$('u').value=$('t').value='';
+  }catch(e){m.textContent='Could not add the song. Check your connection and try again.'}
  };
 }
 function admin(){
- const s=load();
- app.innerHTML=`<h1>Admin</h1>
- <div class="card"><label>Cafe name<input id="cn" value="${esc(s.cafe)}"></label>
- <button id="sv" class="alt">Save name</button></div>
- <h2>Coupon codes</h2><div class="card"><button id="gen">Make a new code</button>
- <div id="cl">${s.coupons.slice().reverse().map(c=>`<div class="row ${c.used?'used':''}"><span class="code">${c.code}</span><span>${c.used?'used':'ready'}</span></div>`).join('')||'<p>No codes yet. Make one when a customer pays.</p>'}</div></div>
- <h2>Artist songs (play when the queue is empty)</h2><div class="card">
+ app.innerHTML=`<h1>Admin</h1><p class="mut">Customer link: <a href="${link('request')}">${esc(link('request'))}</a></p>
+ <div class="card"><label>Venue or event name<input id="cn"></label><button id="sv" class="alt">Save name</button></div>
+ <h2>What plays by default</h2><div class="card">
+ <label>Mode<select id="md"><option value="default">Default mix (all genres)</option><option value="genre">Pick a genre</option><option value="owner">Our own playlist</option></select></label>
+ <label>Genre<select id="gn"></select></label>
+ <label>Our playlist link<input id="op" placeholder="YouTube playlist link"></label>
+ <label>Featured artist song after every<select id="iv"><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select> songs</label>
+ <div class="msg" id="sm"></div></div>
+ <h2>Coupon codes</h2><div class="card"><button id="gen">Make a new code</button><div id="cl"></div></div>
+ <h2>Featured artist songs</h2><div class="card">
  <input id="an" placeholder="Artist name"><input id="av" placeholder="YouTube song link"><input id="ac" placeholder="Artist channel link (for the QR code)">
- <button id="aa">Add artist song</button><div class="msg" id="am"></div>
- ${s.artists.map((a,i)=>`<div class="row"><span>${esc(a.name)}</span><button class="alt" data-i="${i}">Remove</button></div>`).join('')}</div>`;
- $('sv').onclick=()=>{s.cafe=$('cn').value.trim()||'My Cafe';save(s)};
- $('gen').onclick=()=>{s.coupons.push({code:rc(),used:false});save(s);admin()};
- $('aa').onclick=()=>{const v=vidId($('av').value.trim());if(!v||!$('an').value.trim())return $('am').textContent='Add the artist name and a valid YouTube song link.';
-  s.artists.push({name:$('an').value.trim(),vid:v,channel:$('ac').value.trim()});save(s);admin()};
- app.querySelectorAll('button[data-i]').forEach(b=>b.onclick=()=>{s.artists.splice(+b.dataset.i,1);save(s);admin()});
+ <button id="aa">Add artist song</button><div class="msg" id="am"></div><div id="al"></div></div>
+ <button class="alt" id="lo">Log out</button>`;
+ listen(base().child('name'),s=>{if(document.activeElement!==$('cn'))$('cn').value=s.val()||''});
+ listen(base().child('coupons'),s=>{const a=[];s.forEach(c=>{a.push([c.key,c.val().used])});
+  $('cl').innerHTML=a.reverse().map(([k,u])=>`<div class="row ${u?'used':''}"><span class="code">${k}</span><span>${u?'used':'ready'}</span></div>`).join('')||'<p class="mut">No codes yet. Make one when a customer pays.</p>'});
+ listen(base().child('artists'),s=>{let h='';s.forEach(c=>{h+=`<div class="row"><span>${esc(c.val().name)}</span><button class="alt" data-k="${c.key}">Remove</button></div>`});
+  $('al').innerHTML=h;$('al').querySelectorAll('button').forEach(b=>b.onclick=()=>base().child('artists/'+b.dataset.k).remove())});
+ $('sv').onclick=()=>base().child('name').set($('cn').value.trim()||cafe);
+ $('gen').onclick=()=>base().child('coupons/'+rc()).set({used:false});
+ $('aa').onclick=()=>{const v=vidId($('av').value.trim()),n=$('an').value.trim();
+  if(!v||!n)return $('am').textContent='Add the artist name and a valid YouTube song link.';
+  base().child('artists').push({name:n,vid:v,channel:$('ac').value.trim()});$('an').value=$('av').value=$('ac').value='';$('am').textContent=''};
+ const paint=()=>{if(document.activeElement===$('gn'))return;
+  $('gn').innerHTML=genres.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')||'<option value="">(no genres yet)</option>';
+  $('gn').value=cur.genre||'';$('md').value=cur.mode||'default';$('iv').value=cur.interval||4;
+  if(document.activeElement!==$('op'))$('op').value=cur.ownerPlaylist?'https://www.youtube.com/playlist?list='+cur.ownerPlaylist:''};
+ const saveSet=()=>{const m=$('op').value.match(/[?&]list=([\w-]+)/);
+  $('sm').textContent=$('md').value==='owner'&&!m?'Paste a playlist link to use this mode.':'';
+  base().child('settings').set({mode:$('md').value,genre:$('gn').value||'',interval:+$('iv').value,ownerPlaylist:m?m[1]:''})};
+ listen(base().child('settings'),s=>{cur=s.val()||{};paint()});
+ listen(db.ref('genres'),s=>{genres=[];s.forEach(c=>{genres.push({id:c.key,...c.val()})});paint()});
+ ['md','gn','iv','op'].forEach(i=>$(i).onchange=saveSet);
+ $('lo').onclick=()=>auth.signOut().then(route);
 }
+function company(){
+ app.innerHTML=`<h1>Company playlists</h1><p class="mut">Genres every venue can pick from.</p><div class="card">
+ <input id="gn" placeholder="Genre name (e.g. Garba)"><input id="gp" placeholder="YouTube playlist link"><button id="ga">Add genre</button><div class="msg" id="m"></div><div id="gl"></div></div>`;
+ const no=()=>$('m').textContent='Only the company login can change this.';
+ listen(db.ref('genres'),s=>{let h='';s.forEach(c=>{h+=`<div class="row"><span>${esc(c.val().name)}</span><button class="alt" data-k="${c.key}">Remove</button></div>`});
+  $('gl').innerHTML=h||'<p class="mut">None yet.</p>';$('gl').querySelectorAll('button').forEach(b=>b.onclick=()=>db.ref('genres/'+b.dataset.k).remove().catch(no))});
+ $('ga').onclick=()=>{const m=$('gp').value.match(/[?&]list=([\w-]+)/),n=$('gn').value.trim();
+  if(!m||!n)return $('m').textContent='Add a genre name and a YouTube playlist link.';
+  db.ref('genres').push({name:n,playlist:m[1]}).then(()=>{$('gn').value=$('gp').value='';$('m').textContent=''}).catch(no)};
+}
+let qList=[],artists=[],rot=0,genres=[],cur={},sinceFeat=0,inPl=false,defCount=0,lastAdv=0,tick;
 function screen(){
- const s=load();
  app.style.maxWidth='1200px';
  app.innerHTML=`<div id="scr"><div><div id="ytwrap"><div id="yt"></div></div>
- <button id="start" style="margin-top:12px">Start the jukebox</button></div>
- <div><div class="tag" id="cafe">${esc(s.cafe)}</div><div class="now" id="now">Press start</div>
- <div id="qrbox" class="card" hidden><b>Like this song? Scan to subscribe.</b><br><br><div id="qr"></div></div>
- <h2>Up next</h2><div id="q"></div><p style="color:var(--mut)">Buy a coupon at the counter, then open <b>${esc(location.origin+location.pathname)}#request</b></p></div></div>`;
- $('start').onclick=()=>{$('start').hidden=true;
-  const make=()=>{player=new YT.Player('yt',{width:'100%',height:'100%',playerVars:{autoplay:1,rel:0},events:{onReady:next,onStateChange:e=>{if(e.data===0)next()},onError:next}})};
-  ytReady?make():(window.onYouTubeIframeAPIReady=make);
-  if(!window.YT){const t=document.createElement('script');t.src='https://www.youtube.com/iframe_api';document.head.appendChild(t)}
+ <div class="row"><button id="start" style="margin-top:12px">Start the jukebox</button><button id="skip" class="alt" style="margin-top:12px" hidden>Skip</button></div></div>
+ <div><div class="tag" id="cafe">${APP_NAME}</div><div class="now" id="now">Press start</div>
+ <div id="qrbox" class="card" hidden><b>Like this song? Scan to subscribe.</b><br><br><div class="qr" id="qr"></div></div>
+ <h2>Up next</h2><div id="q"></div>
+ <div class="card"><b>Add your song</b><div class="mut">Buy a coupon at the counter, then scan.</div><br><div class="qr" id="rq"></div></div></div></div>`;
+ new QRCode($('rq'),{text:link('request'),width:120,height:120});
+ listen(base().child('name'),s=>{$('cafe').textContent=(s.val()||cafe)+' · '+APP_NAME});
+ listen(base().child('queue').orderByChild('ts'),s=>{qList=[];s.forEach(c=>{qList.push({key:c.key,...c.val()})});drawQ()});
+ listen(base().child('artists'),s=>{artists=[];s.forEach(c=>{artists.push(c.val())})});
+ listen(base().child('settings'),s=>{cur=s.val()||{}});
+ listen(db.ref('genres'),s=>{genres=[];s.forEach(c=>{genres.push({id:c.key,...c.val()})})});
+ $('skip').onclick=()=>{inPl=inPl;next()};
+ $('start').onclick=()=>{$('start').hidden=true;$('skip').hidden=false;
+  const make=()=>{player=new YT.Player('yt',{width:'100%',height:'100%',playerVars:{autoplay:1,rel:0},events:{onReady:next,
+   onStateChange:e=>{if(e.data===1&&inPl)$('now').textContent=player.getVideoData().title;
+    if(e.data===0&&Date.now()-lastAdv>2000){inPl=false;next()}},onError:()=>{inPl=false;next()}}});
+   clearInterval(tick);tick=setInterval(()=>{try{const d=player.getDuration(),t=player.getCurrentTime();
+    if(player.getPlayerState()===1&&d>0&&d-t<1.2&&Date.now()-lastAdv>4000)next()}catch(e){}},500)};
+  if(window.YT&&YT.Player)make();else{window.onYouTubeIframeAPIReady=make;if(!document.getElementById('yta')){const t=document.createElement('script');t.id='yta';t.src='https://www.youtube.com/iframe_api';document.head.appendChild(t)}}
  };
- if(window.YT&&YT.Player)ytReady=true;
- drawQ();window.addEventListener('storage',e=>{if(e.key===KEY&&location.hash==='#screen')drawQ()});
 }
-function drawQ(){const s=load(),q=$('q');if(!q)return;
- q.innerHTML=s.queue.map(x=>`<div class="card">${esc(x.title)}</div>`).join('')||'<p style="color:var(--mut)">Queue is empty. Artist songs will play.</p>'}
+function drawQ(){const q=$('q');if(!q)return;
+ q.innerHTML=qList.map(x=>`<div class="card">${esc(x.title)}</div>`).join('')||'<p class="mut">Queue is empty. Artist songs will play.</p>'}
+function defaultList(){
+ const g=genres.find(x=>x.id===cur.genre);
+ if(cur.mode==='owner'&&cur.ownerPlaylist)return cur.ownerPlaylist;
+ if(cur.mode==='genre'&&g)return g.playlist;
+ return genres.length?genres[Math.floor(Math.random()*genres.length)].playlist:null;
+}
 function next(){
- const s=load();let item,art=null;
- if(s.queue.length){item=s.queue.shift()}
- else if(s.artists.length){art=s.artists[s.rot%s.artists.length];s.rot++;item={vid:art.vid,title:art.name+' (featured artist)'}}
- else{$('now').textContent='Nothing to play. Add artist songs in admin.';return}
- save(s);player.loadVideoById(item.vid);$('now').textContent=item.title;drawQ();
- const box=$('qrbox');$('qr').innerHTML='';
- if(art&&art.channel){box.hidden=false;new QRCode($('qr'),{text:art.channel,width:140,height:140})}else box.hidden=true;
+ lastAdv=Date.now();
+ if(artists.length&&sinceFeat>=(cur.interval||4)){const a=artists[rot++%artists.length];sinceFeat=0;inPl=false;return play(a.vid,a.name+' (featured artist)',a)}
+ if(qList.length){const it=qList.shift();base().child('queue/'+it.key).remove();sinceFeat++;inPl=false;play(it.vid,it.title,null);return drawQ()}
+ const pl=defaultList();
+ if(!pl){if(artists.length){const a=artists[rot++%artists.length];inPl=false;return play(a.vid,a.name+' (featured artist)',a)}
+  $('now').textContent='Nothing to play. Add a playlist or artist songs.';return}
+ sinceFeat++;$('qrbox').hidden=true;
+ if(inPl&&defCount<5){defCount++;player.nextVideo()}
+ else{defCount=0;inPl=true;player.loadPlaylist({listType:'playlist',list:pl,index:Math.floor(Math.random()*10)});player.setShuffle(true)}
+}
+function play(vid,title,art){
+ player.loadVideoById(vid);$('now').textContent=title;
+ $('qr').innerHTML='';const b=$('qrbox');
+ if(art&&art.channel){b.hidden=false;new QRCode($('qr'),{text:art.channel,width:140,height:140})}else b.hidden=true;
 }
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-route();
 </script></body></html>
