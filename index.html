@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cafe Jukebox</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#2a1233">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#2a1233;--card:#3b1c49;--amber:#ffb21e;--teal:#1fb8a8;--ink:#fff4e0;--mut:#c9b3d3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,sans-serif;min-height:100vh}
+main{max-width:720px;margin:0 auto;padding:20px}
+h1{font-size:2.2rem;font-weight:800;margin:.2em 0}h2{font-size:1.2rem;margin:1.2em 0 .4em}
+a{color:var(--amber)}
+.card{background:var(--card);border-radius:14px;padding:16px;margin:12px 0}
+input,button{font:inherit;padding:12px;border-radius:10px;border:2px solid #5a3a6b;background:#22102b;color:var(--ink);width:100%;margin:6px 0}
+button{background:var(--amber);color:#2a1233;font-weight:800;border:0;cursor:pointer}
+button.alt{background:transparent;color:var(--ink);border:2px solid var(--teal)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--teal)}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.row button{width:auto}.code{font-weight:800;letter-spacing:.15em;color:var(--amber)}
+.used{opacity:.4;text-decoration:line-through}.msg{color:var(--teal);min-height:1.4em}
+#scr{display:grid;grid-template-columns:1.6fr 1fr;gap:20px;max-width:1200px}
+@media(max-width:800px){#scr{grid-template-columns:1fr}}
+#ytwrap{aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden}#ytwrap iframe{width:100%;height:100%}
+.now{font-size:1.6rem;font-weight:800}.tag{color:var(--teal)}#qr{background:#fff;padding:10px;display:inline-block;border-radius:10px}
+</style></head><body><main id="app"></main>
+<script>
+// ---- storage (swap these two functions for Firebase/Supabase later) ----
+const KEY='jukebox_v1';
+const def={cafe:'My Cafe',coupons:[],queue:[],artists:[
+ {name:'Sample artist',vid:'dQw4w9WgXcQ',channel:'https://www.youtube.com/@YouTube'}],rot:0};
+const load=()=>{try{return Object.assign({},def,JSON.parse(localStorage.getItem(KEY)))}catch(e){return {...def}}};
+const save=s=>{try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}};
+// ----------------------------------------------------------------------
+const $=id=>document.getElementById(id), app=$('app');
+const vidId=u=>{const m=(u||'').match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null)};
+const rc=()=>Math.random().toString(36).slice(2,8).toUpperCase();
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let player,ytReady=false;
+window.onYouTubeIframeAPIReady=()=>{ytReady=true};
+window.addEventListener('storage',e=>{if(e.key===KEY)route(true)});
+window.addEventListener('hashchange',()=>route());
+
+function route(soft){
+ const h=location.hash.replace('#','')||'home';
+ if(h==='screen'){if(!soft)screen()}else if(h==='request')request();else if(h==='admin')admin();else home();
+}
+function home(){
+ app.innerHTML=`<h1>Cafe Jukebox</h1><p>Pick a screen:</p>
+ <div class="card"><b>Cafe owner</b><br>Make coupon codes and manage artist songs.<br><a href="#admin">Open admin</a></div>
+ <div class="card"><b>Jukebox screen</b><br>Open this on the cafe TV.<br><a href="#screen">Open screen</a></div>
+ <div class="card"><b>Customer</b><br>Enter a coupon code and a song.<br><a href="#request">Open request page</a></div>
+ <p style="color:var(--mut)">Prototype note: data is saved in this browser only, so all three pages work together in one browser. Cross-device sync needs the backend step.</p>`;
+}
+function request(){
+ app.innerHTML=`<h1>Play your song</h1><div class="card">
+ <label>Coupon code<input id="c" placeholder="e.g. 7KQ2ZD" autocapitalize="characters"></label>
+ <label>YouTube link<input id="u" placeholder="Paste a YouTube link"></label>
+ <label>Song name<input id="t" placeholder="Song name (shown on screen)"></label>
+ <button id="go">Add to queue</button><div class="msg" id="m" role="status"></div></div>`;
+ $('go').onclick=()=>{
+  const s=load(),code=$('c').value.trim().toUpperCase(),v=vidId($('u').value.trim());
+  const cp=s.coupons.find(x=>x.code===code);
+  if(!cp)return $('m').textContent='Code not found. Check it with the cashier.';
+  if(cp.used)return $('m').textContent='This code is already used.';
+  if(!v)return $('m').textContent='That link is not a YouTube link. Copy it from the YouTube share button.';
+  cp.used=true;s.queue.push({vid:v,title:$('t').value.trim()||'Requested song'});save(s);
+  $('m').textContent=`Added! You are number ${s.queue.length} in the queue.`;$('c').value=$('u').value=$('t').value='';
+ };
+}
+function admin(){
+ const s=load();
+ app.innerHTML=`<h1>Admin</h1>
+ <div class="card"><label>Cafe name<input id="cn" value="${esc(s.cafe)}"></label>
+ <button id="sv" class="alt">Save name</button></div>
+ <h2>Coupon codes</h2><div class="card"><button id="gen">Make a new code</button>
+ <div id="cl">${s.coupons.slice().reverse().map(c=>`<div class="row ${c.used?'used':''}"><span class="code">${c.code}</span><span>${c.used?'used':'ready'}</span></div>`).join('')||'<p>No codes yet. Make one when a customer pays.</p>'}</div></div>
+ <h2>Artist songs (play when the queue is empty)</h2><div class="card">
+ <input id="an" placeholder="Artist name"><input id="av" placeholder="YouTube song link"><input id="ac" placeholder="Artist channel link (for the QR code)">
+ <button id="aa">Add artist song</button><div class="msg" id="am"></div>
+ ${s.artists.map((a,i)=>`<div class="row"><span>${esc(a.name)}</span><button class="alt" data-i="${i}">Remove</button></div>`).join('')}</div>`;
+ $('sv').onclick=()=>{s.cafe=$('cn').value.trim()||'My Cafe';save(s)};
+ $('gen').onclick=()=>{s.coupons.push({code:rc(),used:false});save(s);admin()};
+ $('aa').onclick=()=>{const v=vidId($('av').value.trim());if(!v||!$('an').value.trim())return $('am').textContent='Add the artist name and a valid YouTube song link.';
+  s.artists.push({name:$('an').value.trim(),vid:v,channel:$('ac').value.trim()});save(s);admin()};
+ app.querySelectorAll('button[data-i]').forEach(b=>b.onclick=()=>{s.artists.splice(+b.dataset.i,1);save(s);admin()});
+}
+function screen(){
+ const s=load();
+ app.style.maxWidth='1200px';
+ app.innerHTML=`<div id="scr"><div><div id="ytwrap"><div id="yt"></div></div>
+ <button id="start" style="margin-top:12px">Start the jukebox</button></div>
+ <div><div class="tag" id="cafe">${esc(s.cafe)}</div><div class="now" id="now">Press start</div>
+ <div id="qrbox" class="card" hidden><b>Like this song? Scan to subscribe.</b><br><br><div id="qr"></div></div>
+ <h2>Up next</h2><div id="q"></div><p style="color:var(--mut)">Buy a coupon at the counter, then open <b>${esc(location.origin+location.pathname)}#request</b></p></div></div>`;
+ $('start').onclick=()=>{$('start').hidden=true;
+  const make=()=>{player=new YT.Player('yt',{width:'100%',height:'100%',playerVars:{autoplay:1,rel:0},events:{onReady:next,onStateChange:e=>{if(e.data===0)next()},onError:next}})};
+  ytReady?make():(window.onYouTubeIframeAPIReady=make);
+  if(!window.YT){const t=document.createElement('script');t.src='https://www.youtube.com/iframe_api';document.head.appendChild(t)}
+ };
+ if(window.YT&&YT.Player)ytReady=true;
+ drawQ();window.addEventListener('storage',e=>{if(e.key===KEY&&location.hash==='#screen')drawQ()});
+}
+function drawQ(){const s=load(),q=$('q');if(!q)return;
+ q.innerHTML=s.queue.map(x=>`<div class="card">${esc(x.title)}</div>`).join('')||'<p style="color:var(--mut)">Queue is empty. Artist songs will play.</p>'}
+function next(){
+ const s=load();let item,art=null;
+ if(s.queue.length){item=s.queue.shift()}
+ else if(s.artists.length){art=s.artists[s.rot%s.artists.length];s.rot++;item={vid:art.vid,title:art.name+' (featured artist)'}}
+ else{$('now').textContent='Nothing to play. Add artist songs in admin.';return}
+ save(s);player.loadVideoById(item.vid);$('now').textContent=item.title;drawQ();
+ const box=$('qrbox');$('qr').innerHTML='';
+ if(art&&art.channel){box.hidden=false;new QRCode($('qr'),{text:art.channel,width:140,height:140})}else box.hidden=true;
+}
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+route();
+</script></body></html>
