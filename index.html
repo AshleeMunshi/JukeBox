@@ -41,7 +41,7 @@ const link=h=>location.origin+location.pathname+'?venue='+cafe+'#'+h;
 let db,auth,player,ytReady=false,off=[];
 document.title=APP_NAME;
 
-if(firebaseConfig.apiKey==='PASTE_API_KEY'){
+if(firebaseConfig.apiKey==='AIzaSyDQlUq21Ni3NbobyW80J5QWI0TbAOXKiWo'){
  app.innerHTML=`<h1>${APP_NAME}</h1><div class="card">Backend not connected yet. Paste your Firebase config into <b>index.html</b> (see the setup steps).</div>`;
 }else{
  firebase.initializeApp(firebaseConfig);db=firebase.database();auth=firebase.auth();
